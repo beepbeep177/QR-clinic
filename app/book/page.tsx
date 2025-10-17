@@ -38,7 +38,7 @@ import { toast } from 'sonner';
 const bookingSchema = z.object({
   patient_name: z.string().min(2, 'Name must be at least 2 characters'),
   patient_email: z.string().email('Please enter a valid email'),
-  patient_phone: z.string().min(10, 'Please enter a valid phone number'),
+  patient_phone: z.string().min(8, 'Please enter a valid phone number'),
   appointment_date: z.date({
     required_error: 'Please select a date',
   }),
@@ -80,28 +80,66 @@ export default function BookAppointmentPage() {
   async function onSubmit(values: BookingFormValues) {
     setIsLoading(true);
     try {
+      // Validate required fields
+      if (!values.appointment_date) {
+        toast.error('Please select an appointment date');
+        return;
+      }
+      if (!values.appointment_time) {
+        toast.error('Please select an appointment time');
+        return;
+      }
+      if (!values.consultation_type) {
+        toast.error('Please select a consultation type');
+        return;
+      }
+
+      // Fix date formatting to avoid timezone issues
+      const appointmentDate = new Date(values.appointment_date);
+      const formattedDate = appointmentDate.getFullYear() + '-' + 
+        String(appointmentDate.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(appointmentDate.getDate()).padStart(2, '0');
+
+      const appointmentData = {
+        patient_name: values.patient_name.trim(),
+        patient_email: values.patient_email.trim().toLowerCase(),
+        patient_phone: values.patient_phone.trim(),
+        appointment_date: formattedDate,
+        appointment_time: values.appointment_time,
+        consultation_type: values.consultation_type,
+        status: 'pending',
+      };
+
+      console.log('Submitting appointment:', appointmentData);
+
       const { data, error } = await supabase
         .from('appointments')
-        .insert([
-          {
-            patient_name: values.patient_name,
-            patient_email: values.patient_email,
-            patient_phone: values.patient_phone,
-            appointment_date: format(values.appointment_date, 'yyyy-MM-dd'),
-            appointment_time: values.appointment_time,
-            consultation_type: values.consultation_type,
-            status: 'pending',
-          },
-        ])
+        .insert([appointmentData])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
 
+      console.log('Appointment created:', data);
       setIsSubmitted(true);
       toast.success('Appointment booked successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error booking appointment:', error);
-      toast.error('Failed to book appointment. Please try again.');
+      
+      // More specific error messages
+      if (error?.code === 'PGRST116') {
+        toast.error('Database table not found. Please contact support.');
+      } else if (error?.code === '23505') {
+        toast.error('This appointment slot may already be taken.');
+      } else if (error?.message?.includes('permission')) {
+        toast.error('Permission denied. Please check database settings.');
+      } else if (error?.message?.includes('network')) {
+        toast.error('Network error. Please check your connection.');
+      } else {
+        toast.error(`Failed to book appointment: ${error?.message || 'Unknown error'}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -259,9 +297,11 @@ export default function BookAppointmentPage() {
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) =>
-                            date < new Date() || date.getDay() === 0 || date.getDay() === 6
-                          }
+                          disabled={(date) => {
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            return date < today || date.getDay() === 0 || date.getDay() === 6;
+                          }}
                           initialFocus
                         />
                       </PopoverContent>

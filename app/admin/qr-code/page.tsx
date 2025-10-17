@@ -15,7 +15,7 @@ export default function QRCodePage() {
     ? `${window.location.origin}/book`
     : process.env.NEXT_PUBLIC_APP_URL
     ? `${process.env.NEXT_PUBLIC_APP_URL}/book`
-    : 'https://your-clinic.com/book';
+    : 'https://qr-clinic.vercel.app/';
 
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(bookingUrl);
